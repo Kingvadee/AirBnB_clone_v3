@@ -1,74 +1,94 @@
 #!/usr/bin/python3
-''' new view for State objects'''
-
-from flask import Flask
-from flask import Flask, abort
+"""states route handler"""
 from api.v1.views import app_views
-from os import name
+from flask import jsonify, abort, request
+from models import storage
 from models.state import State
-from flask import request
 
 
-@app_views.route('/status', methods=['GET'] strict_slashes=False)
-def toGet():
-    '''getting thing'''
-    objects = storage.all('State')
-    lista = []
-    for state in objects.values():
-        lista.append(state.to_dict())
-    return jsonify(lista)
-
-
-@app_views.route('/states/<string:stateid>', methods=['GET'],
-                 strict_slashes=False)
-def toGetid():
-    '''Updates a State object id'''
-    objects = storage.get('State', 'state_id')
-    if objects is None:
+def check(id):
+    """
+        checking if state is valid in storage
+    """
+    try:
+        checker = storage.get(State, id)
+        checker.to_dict()
+    except Exception:
         abort(404)
-    return jsonify(objects.to_dict()), 'OK'
+    return checker
 
 
-@app_views.route('/states/', methods=['POST'],
-                 strict_slashes=False)
-def posting():
-    '''Creates a State'''
-    response = request.get_json()
-    if response id None:
-        abort(400, {'Not a JSON'})
-    if "name" not in response:
-        abort(400, {'Missing name'})
-    stateObject = State(name=response['name'])
-    storage.new(stateObject)
+def get_all(id_state):
+    """
+        getting all states from storage
+    """
+    if id_state is not None:
+        state = check(id_state)
+        dict_state = state.to_dict()
+        return jsonify(dict_state)
+    states = storage.all(State)
+    states_all = []
+    for x in states.values():
+        states_all.append(x.to_dict())
+    return jsonify(states_all)
+
+
+def delete_state(id_state):
+    """
+        deleting a state request
+    """
+    state = check(id_state)
+    storage.delete(state)
     storage.save()
-    return jsonify(stateObject.to_dict()), '201'
+    response = {}
+    return jsonify(response)
 
 
-@app_views.route('/states/<state_id>', methods=['PUT'],
-                 strict_slashes=False)
-def putinV():
-    '''vladimir'''
-    response = request.get_json()
-    if response id None:
-        abort(400, {'Not a JSON'})
-    stateObject = storage.get(State, state_id)
-    if stateObject is None:
-        abort(404)
-    ignoreKeys = ['id', 'created_at', 'updated_at']
-    for key in response.items():
-        if key not in ignoreKeys:
-            setattr(stateObject, key)
+def create_state(request):
+    """
+        Create new state request
+    """
+    request_json = request.get_json()
+    if request_json is None:
+        abort(400, 'Not a JSON')
+    try:
+        name_state = request_json['name']
+    except Exception:
+        abort(400, "Missing name")
+    state = State(name=name_state)
+    storage.new(state)
     storage.save()
-    return jsonify(stateObject.to_dict()), '200'
+    return jsonify(state.to_dict())
 
 
-@app_views.route('/states/<state_id>', methods=['DELETE'],
-                 strict_slashes=False)
-def deleting():
-    ''' to delete an onbject'''
-    stateObject = storage.get(State, state_id)
-    if stateObject is None:
-        abort(404)
-    storage.delete(stateObject)
-    storage.save()
-    return jsonify({}), '200'
+def update_state(state_id, request):
+    """
+        Update state if found
+    """
+    state = check(state_id)
+    request_json = request.get_json()
+    if request_json is None:
+        abort(400, 'Not a JSON')
+    for x, y in request_json.items():
+        if (x not in ('id', 'created_at', 'updated_at')):
+            setattr(state, x, y)
+        storage.save()
+        return jsonify(state.to_dict())
+
+
+@app_views.route('/states/', methods=['GET', 'POST'],
+                 defaults={'state_id': None}, strict_slashes=False)
+@app_views.route('/states/<state_id>',
+                 methods=['GET', 'DELETE', 'PUT'])
+def states(state_id):
+    """
+    Global Method to handle request
+    """
+    if (request.method == "GET"):
+        return get_all(state_id)
+    elif request.method == "DELETE":
+        return delete_state(state_id)
+    elif request.method == "POST":
+        return create_state(request), 201
+    elif request.method == 'PUT':
+        return update_state(state_id, request), 200
